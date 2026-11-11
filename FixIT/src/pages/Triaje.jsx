@@ -6,7 +6,6 @@ import {
 } from '../services/api'
 import './Triaje.css'
 
-
 function Triaje() {
   const navigate = useNavigate()
 
@@ -59,23 +58,23 @@ function Triaje() {
   }
 
   const handleSiguiente = async () => {
-  if (respuestas[preguntaActual] === undefined || enviando) return
+    if (respuestas[preguntaActual] === undefined || enviando) return
 
-  if (preguntaActual < preguntas.length - 1) {
-    setPreguntaActual((prev) => prev + 1)
-    return
-  }
+    if (preguntaActual < preguntas.length - 1) {
+      setPreguntaActual((prev) => prev + 1)
+      return
+    }
 
-  const incidenciaId = sessionStorage.getItem('fixit_incidencia_id')
+    const incidenciaId = sessionStorage.getItem('fixit_incidencia_id')
 
-  if (!incidenciaId) {
-    setErrorEnvio(
-      'No encontramos la incidencia asociada. Registra una incidencia antes de continuar.'
-    )
-    return
-  }
+    if (!incidenciaId) {
+      setErrorEnvio(
+        'No encontramos la incidencia asociada. Registra una incidencia antes de continuar.'
+      )
+      return
+    }
 
-  const respuestasPayload = preguntas.map((pregunta, indice) => ({
+    const respuestasPayload = preguntas.map((pregunta, indice) => ({
       pregunta_id: pregunta.id,
       opcion_id: respuestas[indice]
     }))
@@ -129,6 +128,7 @@ function Triaje() {
         <div className="triaje-card">
           <p role="alert">{error}</p>
           <button
+            type="button"
             className="btn-primary"
             onClick={() => window.location.reload()}
           >
@@ -145,6 +145,7 @@ function Triaje() {
         <div className="triaje-card">
           <p>No hay preguntas de triaje disponibles.</p>
           <button
+            type="button"
             className="btn-texto"
             onClick={() => navigate('/registrar-incidencia')}
           >
@@ -213,27 +214,30 @@ function Triaje() {
             ))}
           </div>
         </div>
+
         {errorEnvio && (
           <p role="alert" className="error-message">
             {errorEnvio}
           </p>
         )}
+
         <div className="triaje-acciones">
-          <button className="btn-texto" onClick={handleAtras}>
+          <button type="button" className="btn-texto" onClick={handleAtras}>
             ← Atrás
           </button>
 
           <button
-          className="btn-primary"
-          onClick={handleSiguiente}
-          disabled={opcionSeleccionada === undefined || enviando}
-        >
-          {enviando
-            ? 'Guardando...'
-            : preguntaActual === preguntas.length - 1
-              ? 'Finalizar'
-              : 'Siguiente →'}
-        </button>
+            type="button"
+            className="btn-primary"
+            onClick={handleSiguiente}
+            disabled={opcionSeleccionada === undefined || enviando}
+          >
+            {enviando
+              ? 'Guardando...'
+              : preguntaActual === preguntas.length - 1
+                ? 'Finalizar'
+                : 'Siguiente →'}
+          </button>
         </div>
       </div>
     </div>

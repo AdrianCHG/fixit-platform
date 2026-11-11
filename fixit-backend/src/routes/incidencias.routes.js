@@ -2,22 +2,25 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { pool } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
-import multer from 'multer'; // 1. Importamos multer
+import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 
-// 2. Configuración de Multer para guardar las imágenes
+// Configuración de Multer para guardar las imágenes de incidencias
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    // Las imágenes irán a la carpeta
-    cb(null, 'uploads/incidencias/'); 
+    const dir = 'uploads/incidencias/';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
   },
   filename: function (req, file, cb) {
-    // Generamos un nombre único para que no se sobreescriban
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    cb(null, `${file.fieldname}-${uniqueSuffix}${extension}`);
   }
 });
 
@@ -26,21 +29,21 @@ const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('El archivo no es una imagen'), false);
+    cb(new Error('El archivo no es una imagen válida.'), false);
   }
 };
 
-// Middleware configurado (permite hasta 3 imágenes)
+// Middleware configurado (permite hasta 3 imágenes, máx 5MB c/u)
 const upload = multer({ 
   storage: storage, 
   fileFilter: fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // Límite de 5MB por foto
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 // --- RUTAS ---
 
-// Obtener tipos de equipo y categorías desde MySQL
-router.get('/catalogos', async (req, res) => {
+// Obtener catálogos de tipos de equipo y categorías
+router.get('/catalogos', async (req, res, next) => {
   try {
     const [tiposEquipo] = await pool.query(`
       SELECT id, codigo, nombre
@@ -66,31 +69,28 @@ router.get('/catalogos', async (req, res) => {
         nombre ASC
     `);
 
-    res.json({
+    return res.json({
       success: true,
       data: { tiposEquipo, categorias }
     });
   } catch (error) {
-    console.error('Error al obtener catálogos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'No se pudieron cargar los catálogos'
-    });
+    next(error);
   }
 });
 
-// 3. El POST para intercepta las imágenes ('fotos' es el nombre del input en React)
-router.post('/', authenticateToken, upload.array('fotos', 3), async (req, res) => {
-  const connection = await pool.getConnection(); 
-  await connection.beginTransaction();
+// Registrar nueva incidencia con hasta 3 fotos adjuntas
+router.post('/', authenticateToken, upload.array('fotos', 3), async (req, res, next) => {
+  let connection;
 
   try {
     const { tipo_equipo_id, categoria_id, descripcion } = req.body;
 
     if (!tipo_equipo_id || !descripcion || descripcion.trim() === '') {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'Faltan datos obligatorios' });
+      return res.status(400).json({ success: false, message: 'Faltan datos obligatorios.' });
     }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
 
     const incidenciaId = randomUUID();
     const clienteId = req.user.sub;
@@ -116,24 +116,29 @@ router.post('/', authenticateToken, upload.array('fotos', 3), async (req, res) =
     }
 
     await connection.commit();
-    connection.release();
 
     return res.status(201).json({
       success: true,
-      message: 'Incidencia y fotos registradas correctamente',
+      message: 'Incidencia y fotos registradas correctamente.',
       data: { id: incidenciaId }
     });
 
   } catch (error) {
-    await connection.rollback();
-    connection.release();
-    console.error('Error al registrar incidencia con fotos:', error);
-    return res.status(500).json({ success: false, message: 'No se pudo registrar la incidencia' });
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        console.error('Error al revertir transacción de incidencia:', rollbackError);
+      }
+    }
+    next(error);
+  } finally {
+    if (connection) connection.release();
   }
 });
 
-/* Obtener incidencias del cliente autenticado */
-router.get('/mis-incidencias', authenticateToken, async (req, res) => {
+// Obtener incidencias del cliente autenticado
+router.get('/mis-incidencias', authenticateToken, async (req, res, next) => {
   try {
     const clienteId = req.user.sub;
 
@@ -150,18 +155,16 @@ router.get('/mis-incidencias', authenticateToken, async (req, res) => {
 
     return res.json({ success: true, data: incidencias });
   } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ success: false, message: 'Error al obtener incidencias' });
+    next(error);
   }
 });
 
-/* Obtener el detalle de una incidencia (con sus fotos) */
-router.get('/:id', authenticateToken, async (req, res) => {
+// Obtener el detalle de una incidencia específica (con sus fotos)
+router.get('/:id', authenticateToken, async (req, res, next) => {
   try {
     const incidenciaId = req.params.id;
     const clienteId = req.user.sub;
 
-    // Obtener la incidencia
     const [incidencias] = await pool.query(
       `SELECT i.id, i.descripcion, i.estado, i.creado_en, i.actualizado_en,
         te.nombre AS tipo_equipo, cp.nombre AS categoria
@@ -173,10 +176,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
     );
 
     if (incidencias.length === 0) {
-      return res.status(404).json({ success: false, message: 'Incidencia no encontrada' });
+      return res.status(404).json({ success: false, message: 'Incidencia no encontrada.' });
     }
 
-    // Obtener las fotos asociadas
     const [fotos] = await pool.query(
       `SELECT url_archivo FROM adjuntos_incidencia WHERE incidencia_id = ?`,
       [incidenciaId]
@@ -187,8 +189,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     return res.json({ success: true, data: incidenciaData });
   } catch (error) {
-    console.error('Error al consultar incidencia:', error);
-    return res.status(500).json({ success: false, message: 'Error al obtener detalle' });
+    next(error);
   }
 });
 

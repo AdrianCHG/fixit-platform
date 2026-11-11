@@ -9,7 +9,7 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 // ==========================================
-// CONFIGURACIÓN DE MULTER PARA ACTUALIZAR AVATAR
+// CONFIGURACIÓN DE MULTER PARA AVATAR
 // ==========================================
 const storageAvatar = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -34,7 +34,7 @@ const uploadAvatar = multer({
     if (esExtValida && esMimeValido) {
       return cb(null, true);
     } else {
-      cb(new Error('Solo se permiten imágenes (JPG, PNG, WEBP)'));
+      cb(new Error('Solo se permiten imágenes (JPG, PNG, WEBP).'));
     }
   }
 });
@@ -57,7 +57,7 @@ const storageCert = multer.diskStorage({
 
 const uploadCert = multer({ 
   storage: storageCert,
-  limits: { fileSize: 5 * 1024 * 1024 }, // Límite de 5MB por documento
+  limits: { fileSize: 5 * 1024 * 1024 }, // Límite de 5MB
   fileFilter: (req, file, cb) => {
     const tiposPermitidos = /pdf|jpeg|jpg|png|webp/;
     const esExtValida = tiposPermitidos.test(path.extname(file.originalname).toLowerCase());
@@ -65,40 +65,86 @@ const uploadCert = multer({
     if (esExtValida && esMimeValido) {
       return cb(null, true);
     } else {
-      cb(new Error('Solo se permiten archivos PDF o imágenes (JPG, PNG)'));
+      cb(new Error('Solo se permiten archivos PDF o imágenes (JPG, PNG).'));
     }
   }
 });
 
-// Obtener técnicos y sus especialidades para el catálogo público
-router.get('/', async (_req, res) => {
+// ==========================================
+// RUTAS
+// ==========================================
+
+// Catálogo global de modalidades de servicio
+router.get('/modalidades', async (_req, res, next) => {
   try {
-    const [tecnicos] = await pool.query(`
-      SELECT
-        u.id,
-        u.nombre_completo AS nombre,
-        u.telefono,
-        p.biografia,
-        p.anios_experiencia,
-        p.estado_verificacion,
-        p.avatar_url,
-        p.tarifa_hora_min,
-        p.tarifa_hora_max,
-        p.calificacion_prom AS calificacion,
-        p.nro_reseñas AS resenas,
-        p.acepta_reservas
-      FROM usuarios u
-      INNER JOIN perfiles_tecnico p
-        ON p.usuario_id = u.id
-      WHERE u.rol = 'TECNICO'
-        AND u.estado = 'ACTIVO'
-      ORDER BY p.calificacion_prom DESC, p.nro_reseñas DESC
-    `);
+    const [modalidades] = await pool.query(
+      `SELECT id, codigo, nombre FROM modalidades_servicio ORDER BY nombre`
+    );
+    return res.json({ success: true, data: modalidades });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Obtener técnicos (CON SOPORTE PARA FILTROS DE DISTANCIA Y DISPONIBILIDAD)
+router.get('/', async (req, res, next) => {
+  try {
+    // Capturamos los filtros de la URL (Query Params)
+    const lat = parseFloat(req.query.lat);
+    const lng = parseFloat(req.query.lng);
+    const cercania = parseFloat(req.query.cercania);
+    const disponibilidad = req.query.disponibilidad;
+
+    let selectFields = `
+      u.id, u.nombre_completo AS nombre, u.telefono,
+      p.biografia, p.anios_experiencia, p.estado_verificacion,
+      p.avatar_url, p.tarifa_hora_min, p.tarifa_hora_max,
+      p.calificacion_prom AS calificacion, p.nro_reseñas AS resenas, p.acepta_reservas
+    `;
+    let joinClauses = `INNER JOIN perfiles_tecnico p ON p.usuario_id = u.id`;
+    let whereClauses = [`u.rol = 'TECNICO'`, `u.estado = 'ACTIVO'`];
+    const queryParams = [];
+
+    // 1. FILTRO DE CERCANÍA (Fórmula de Haversine nativa en SQL)
+    if (!isNaN(lat) && !isNaN(lng)) {
+      selectFields += `, 
+        (6371 * acos(
+          cos(radians(?)) * cos(radians(d.latitud)) * 
+          cos(radians(d.longitud) - radians(?)) + 
+          sin(radians(?)) * sin(radians(d.latitud))
+        )) AS distancia
+      `;
+      queryParams.push(lat, lng, lat);
+      // Hacemos JOIN con la dirección para obtener la ubicación del taller del técnico
+      joinClauses += ` LEFT JOIN direcciones d ON d.usuario_id = u.id AND d.es_principal = 1`;
+    } else {
+      selectFields += `, NULL AS distancia`;
+    }
+
+    // 2. FILTRO DE DISPONIBILIDAD
+    if (disponibilidad === 'hoy' || disponibilidad === 'inmediata') {
+      whereClauses.push(`p.acepta_reservas = 1`);
+    }
+
+    // Construimos la consulta base
+    let queryStr = `SELECT ${selectFields} FROM usuarios u ${joinClauses} WHERE ${whereClauses.join(' AND ')}`;
+
+    // Si pasaron los kilómetros deseados, filtramos los resultados matemáticamente
+    if (!isNaN(lat) && !isNaN(lng) && !isNaN(cercania) && cercania > 0) {
+      queryStr += ` HAVING distancia <= ?`;
+      queryParams.push(cercania);
+    }
+
+    // Ordenamiento final
+    queryStr += ` ORDER BY p.calificacion_prom DESC, p.nro_reseñas DESC`;
+
+    const [tecnicos] = await pool.query(queryStr, queryParams);
 
     if (tecnicos.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
+    // El resto del código de agrupaciones se mantiene intacto para optimización
     const ids = tecnicos.map((tecnico) => tecnico.id);
     const placeholders = ids.map(() => '?').join(', ');
 
@@ -150,6 +196,7 @@ router.get('/', async (_req, res) => {
       resenas: Number(tecnico.resenas),
       tarifa_hora_min: tecnico.tarifa_hora_min === null ? null : Number(tecnico.tarifa_hora_min),
       tarifa_hora_max: tecnico.tarifa_hora_max === null ? null : Number(tecnico.tarifa_hora_max),
+      distancia_km: tecnico.distancia !== null ? Number(tecnico.distancia).toFixed(2) : null, // NUEVO CAMPO
       especialidades: especialidadesPorTecnico[tecnico.id] || [],
       categorias: categoriasPorTecnico[tecnico.id] || [],
       equipos: equiposPorTecnico[tecnico.id] || [],
@@ -159,14 +206,12 @@ router.get('/', async (_req, res) => {
 
     return res.json({ success: true, data: resultado });
   } catch (error) {
-    console.error('Error al obtener técnicos:', error);
-    return res.status(500).json({ success: false, message: 'No se pudo cargar el catálogo de técnicos' });
+    next(error);
   }
 });
 
-
-// RUTA PRIVADA: Obtener mi propio perfil de técnico (Para el Dashboard)
-router.get('/me', authenticateToken, async (req, res) => {
+// RUTA PRIVADA: Obtener mi propio perfil de técnico (Dashboard)
+router.get('/me', authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.sub;
     
@@ -174,49 +219,65 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Área exclusiva para técnicos.' });
     }
 
+    // AÑADIDO: LEFT JOIN con tabla direcciones
     const [tecnicos] = await pool.query(`
       SELECT
         u.id, u.nombre_completo AS nombre, u.correo, u.telefono, u.tipo_documento, u.nro_documento, u.estado,
         p.biografia, p.anios_experiencia, p.estado_verificacion,
-        p.avatar_url,
-        p.tarifa_hora_min, p.tarifa_hora_max,
-        p.calificacion_prom AS calificacion, p.nro_reseñas AS resenas, p.acepta_reservas
+        p.avatar_url, p.tarifa_hora_min, p.tarifa_hora_max,
+        p.calificacion_prom AS calificacion, p.nro_reseñas AS resenas, p.acepta_reservas,
+        d.distrito_id, d.calle, d.referencia, d.latitud, d.longitud
       FROM usuarios u
       INNER JOIN perfiles_tecnico p ON p.usuario_id = u.id
+      LEFT JOIN direcciones d ON d.usuario_id = u.id AND d.es_principal = 1
       WHERE u.id = ? AND u.rol = 'TECNICO'
     `, [userId]);
 
     if (tecnicos.length === 0) {
-      return res.status(404).json({ success: false, message: 'No se encontró tu perfil de técnico' });
+      return res.status(404).json({ success: false, message: 'No se encontró tu perfil de técnico.' });
     }
 
     const tecnico = tecnicos[0];
 
-    // Consultamos desde documentos_tecnico que ya existe en tu BD
     const [certificaciones] = await pool.query(`
       SELECT id, tipo, url_archivo AS archivo_url, estado, creado_en
       FROM documentos_tecnico
       WHERE tecnico_id = ?
     `, [userId]);
 
+    const [cobertura] = await pool.query(`
+      SELECT d.id AS distrito_id, d.nombre AS nombre_distrito 
+      FROM cobertura_tecnico ct
+      JOIN distritos d ON ct.distrito_id = d.id
+      WHERE ct.tecnico_id = ?
+    `, [userId]);
+
+    const [modalidades] = await pool.query(`
+      SELECT m.id AS modalidad_id, m.nombre AS nombre_modalidad 
+      FROM tecnico_modalidades tm
+      JOIN modalidades_servicio m ON tm.modalidad_id = m.id
+      WHERE tm.tecnico_id = ?
+    `, [userId]);
+
     const resultado = {
       ...tecnico,
       calificacion: Number(tecnico.calificacion),
       resenas: Number(tecnico.resenas),
-      certificaciones: certificaciones
+      certificaciones: certificaciones,
+      cobertura: cobertura,
+      modalidades: modalidades
     };
 
     return res.json({ success: true, data: resultado });
-
   } catch (error) {
-    console.error('Error al obtener perfil propio del técnico:', error);
-    return res.status(500).json({ success: false, message: 'Error al cargar tu dashboard personal' });
+    next(error);
   }
 });
 
-
 // RUTA PRIVADA: Actualizar mi propio perfil de técnico
-router.put('/me', authenticateToken, uploadAvatar.single('avatar'), async (req, res) => {
+router.put('/me', authenticateToken, uploadAvatar.single('avatar'), async (req, res, next) => {
+  let connection;
+
   try {
     const userId = req.user.sub;
 
@@ -224,9 +285,16 @@ router.put('/me', authenticateToken, uploadAvatar.single('avatar'), async (req, 
       return res.status(403).json({ success: false, message: 'Acceso denegado.' });
     }
 
-    const { nombre, telefono, biografia, anios_experiencia, tarifa_hora_min, tarifa_hora_max } = req.body;
+    // AÑADIDO: Recepción de campos de dirección
+    const { 
+      nombre, telefono, biografia, anios_experiencia, tarifa_hora_min, tarifa_hora_max,
+      distrito_id, calle, referencia, latitud, longitud 
+    } = req.body;
 
-    await pool.query(
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    await connection.query(
       `UPDATE usuarios SET nombre_completo = ?, telefono = ? WHERE id = ?`,
       [nombre, telefono, userId]
     );
@@ -236,7 +304,7 @@ router.put('/me', authenticateToken, uploadAvatar.single('avatar'), async (req, 
 
     if (req.file) {
       const nuevaRutaAvatar = `/uploads/avatars/${req.file.filename}`;
-      const [perfilActual] = await pool.query(`SELECT avatar_url FROM perfiles_tecnico WHERE usuario_id = ?`, [userId]);
+      const [perfilActual] = await connection.query(`SELECT avatar_url FROM perfiles_tecnico WHERE usuario_id = ?`, [userId]);
       if (perfilActual.length > 0 && perfilActual[0].avatar_url) {
         const rutaAntiguaDir = path.join(process.cwd(), perfilActual[0].avatar_url);
         if (fs.existsSync(rutaAntiguaDir)) {
@@ -250,24 +318,75 @@ router.put('/me', authenticateToken, uploadAvatar.single('avatar'), async (req, 
 
     queryParams.push(userId);
 
-    await pool.query(
+    await connection.query(
       `UPDATE perfiles_tecnico 
        SET biografia = ?, anios_experiencia = ?, tarifa_hora_min = ?, tarifa_hora_max = ? ${avatarQueryPart}
        WHERE usuario_id = ?`,
       queryParams
     );
 
-    return res.json({ success: true, message: 'Perfil actualizado correctamente en la base de datos.' });
+    // AÑADIDO: GUARDAR UBICACIÓN (TALLER) DEL TÉCNICO EN TABLA DIRECCIONES
+    if (distrito_id && calle) {
+      const [dirRows] = await connection.query(
+        `SELECT id FROM direcciones WHERE usuario_id = ? LIMIT 1`,
+        [userId]
+      );
 
+      if (dirRows.length > 0) {
+        await connection.query(
+          `UPDATE direcciones 
+           SET distrito_id = ?, calle = ?, referencia = ?, latitud = ?, longitud = ?, es_principal = 1 
+           WHERE usuario_id = ?`,
+          [distrito_id, calle, referencia || null, latitud || null, longitud || null, userId]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO direcciones (id, usuario_id, distrito_id, calle, referencia, latitud, longitud, es_principal)
+           VALUES (UUID(), ?, ?, ?, ?, ?, ?, 1)`,
+          [userId, distrito_id, calle, referencia || null, latitud || null, longitud || null]
+        );
+      }
+    }
+
+    // GUARDAR COBERTURA DE DISTRITOS
+    if (req.body.cobertura) {
+      const distritosSeleccionados = JSON.parse(req.body.cobertura);
+      await connection.query('DELETE FROM cobertura_tecnico WHERE tecnico_id = ?', [userId]);
+      if (distritosSeleccionados.length > 0) {
+        const values = distritosSeleccionados.map(distritoId => [userId, distritoId]);
+        await connection.query('INSERT INTO cobertura_tecnico (tecnico_id, distrito_id) VALUES ?', [values]);
+      }
+    }
+
+    // GUARDAR MODALIDADES DE TRABAJO
+    if (req.body.modalidades) {
+      const modalidadesSeleccionadas = JSON.parse(req.body.modalidades);
+      await connection.query('DELETE FROM tecnico_modalidades WHERE tecnico_id = ?', [userId]);
+      if (modalidadesSeleccionadas.length > 0) {
+        const valuesMod = modalidadesSeleccionadas.map(modId => [userId, modId]);
+        await connection.query('INSERT INTO tecnico_modalidades (tecnico_id, modalidad_id) VALUES ?', [valuesMod]);
+      }
+    }
+
+    await connection.commit();
+
+    return res.json({ success: true, message: 'Perfil actualizado correctamente en la base de datos.' });
   } catch (error) {
-    console.error('Error al actualizar perfil del técnico:', error);
-    return res.status(500).json({ success: false, message: 'Error interno al actualizar el perfil.' });
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        console.error('Error al revertir actualización de perfil:', rollbackError);
+      }
+    }
+    next(error);
+  } finally {
+    if (connection) connection.release();
   }
 });
 
-
-// RUTA PRIVADA: Subir certificados o antecedentes a documentos_tecnico
-router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo'), async (req, res) => {
+// RUTA PRIVADA: Subir certificados o antecedentes
+router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo'), async (req, res, next) => {
   try {
     const userId = req.user.sub;
 
@@ -283,7 +402,6 @@ router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo
 
     const archivoUrl = `/uploads/certificados/${req.file.filename}`;
 
-    // 1. Validar límite total de 5 documentos
     const [docsActuales] = await pool.query(
       `SELECT id, tipo, url_archivo FROM documentos_tecnico WHERE tecnico_id = ?`,
       [userId]
@@ -294,7 +412,6 @@ router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo
       return res.status(400).json({ success: false, message: 'Has alcanzado el límite máximo de 5 documentos permitidos.' });
     }
 
-    // 2. Regla de Antecedentes: Solo 1 documento vigente (reemplaza si ya existe)
     if (tipo === 'ANTECEDENTES') {
       const antecedenteExistente = docsActuales.find(doc => doc.tipo === 'ANTECEDENTES');
       if (antecedenteExistente) {
@@ -310,7 +427,6 @@ router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo
       }
     }
 
-    // 3. Insertar nuevo documento con UUID
     const docId = crypto.randomUUID();
     await pool.query(
       `INSERT INTO documentos_tecnico (id, tecnico_id, tipo, url_archivo, estado) VALUES (?, ?, ?, ?, 'PENDIENTE')`,
@@ -318,15 +434,13 @@ router.post('/me/certificaciones', authenticateToken, uploadCert.single('archivo
     );
 
     return res.json({ success: true, message: 'Documento subido exitosamente y pendiente de revisión.' });
-
   } catch (error) {
-    console.error('Error al subir certificado:', error);
-    return res.status(500).json({ success: false, message: 'Error interno al procesar el archivo.' });
+    next(error);
   }
 });
 
-
-router.get('/:id', async (req, res) => {
+// Obtener perfil público de un técnico por ID
+router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -343,7 +457,7 @@ router.get('/:id', async (req, res) => {
     `, [id]);
 
     if (tecnicos.length === 0) {
-      return res.status(404).json({ success: false, message: 'Técnico no encontrado' });
+      return res.status(404).json({ success: false, message: 'Técnico no encontrado.' });
     }
 
     const tecnico = tecnicos[0];
@@ -357,7 +471,18 @@ router.get('/:id', async (req, res) => {
     `, [id]);
 
     const [zonasAtencion] = await pool.query(`
-      SELECT d.nombre AS distrito, d.ciudad FROM cobertura_tecnico ct INNER JOIN distritos d ON d.id = ct.distrito_id WHERE ct.tecnico_id = ? ORDER BY d.nombre
+      SELECT d.id AS distrito_id, d.nombre AS nombre_distrito, d.ciudad 
+      FROM cobertura_tecnico ct 
+      INNER JOIN distritos d ON d.id = ct.distrito_id 
+      WHERE ct.tecnico_id = ? 
+      ORDER BY d.nombre
+    `, [id]);
+
+    const [modalidades] = await pool.query(`
+      SELECT m.id AS modalidad_id, m.nombre AS nombre_modalidad, m.codigo 
+      FROM tecnico_modalidades tm 
+      JOIN modalidades_servicio m ON m.id = tm.modalidad_id 
+      WHERE tm.tecnico_id = ?
     `, [id]);
 
     const resultado = {
@@ -366,13 +491,12 @@ router.get('/:id', async (req, res) => {
       resenas: Number(tecnico.resenas),
       especialidades: especialidades.map(e => e.nombre),
       certificaciones: certificaciones,
-      zonas_atencion: zonasAtencion
+      zonas_atencion: zonasAtencion,
+      modalidades: modalidades
     };
     return res.json({ success: true, data: resultado });
-
   } catch (error) {
-    console.error('Error al obtener perfil del técnico:', error);
-    return res.status(500).json({ success: false, message: 'Error al cargar el perfil' });
+    next(error);
   }
 });
 

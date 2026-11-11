@@ -52,14 +52,26 @@ function Help() {
 
         {/* ACCIONES RÁPIDAS */}
         <div className="help-quick-cards">
-          <div className="help-card" onClick={() => navigate('/registrar-incidencia')}>
+          <div 
+            className="help-card" 
+            onClick={() => navigate('/registrar-incidencia')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/registrar-incidencia')}
+          >
             <span className="card-icon">🛠️</span>
             <h3>¿Tienes una falla?</h3>
             <p>Registra tu equipo y obtén un diagnóstico estimado en minutos.</p>
             <span className="card-link">Registrar incidencia →</span>
           </div>
 
-          <div className="help-card" onClick={() => navigate('/technicians')}>
+          <div 
+            className="help-card" 
+            onClick={() => navigate('/technicians')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/technicians')}
+          >
             <span className="card-icon">👨‍💻</span>
             <h3>Buscar Especialistas</h3>
             <p>Conoce a los técnicos verificados y sus tarifas por hora.</p>
@@ -76,6 +88,9 @@ function Help() {
                 key={index}
                 className={`faq-item ${faqAbierta === index ? 'active' : ''}`}
                 onClick={() => toggleFaq(index)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && toggleFaq(index)}
               >
                 <div className="faq-question">
                   <h4>{faq.pregunta}</h4>
@@ -102,8 +117,9 @@ function Help() {
               ✉️ soporte@fixit.pe
             </a>
             <button
+              type="button"
               className="btn-support-primary"
-              onClick={() => alert('Soporte telefónico disponible las 24 horas: 01 800-FIXIT')}
+              onClick={() => alert('Soporte telefónico disponible las 24 horas: (01) 800-FIXIT')}
             >
               📞 Central de Ayuda
             </button>

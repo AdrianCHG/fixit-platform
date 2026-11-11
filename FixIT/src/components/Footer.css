@@ -28,9 +28,10 @@
 .footer-links a {
   color: #9CA3AF;
   text-decoration: none;
+  transition: color 0.2s ease-in-out; /* Transición suave */
 }
 
 /* Efecto hover */
 .footer-links a:hover {
-  color: #6B7280;
+  color: #4B5563; /* Un gris un poco más oscuro para mejor contraste */
 }

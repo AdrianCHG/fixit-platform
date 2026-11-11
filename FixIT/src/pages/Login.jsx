@@ -23,26 +23,37 @@ function Login() {
         contrasena
       })
 
+      // Imprimimos en consola para inspeccionar qué devuelve exactamente tu API
+      console.log("Respuesta del login:", resultado)
+
+      // Verificamos de forma segura dónde viene el token (sea resultado.data o directo en resultado)
+      const token = resultado?.data?.token || resultado?.token
+      const user = resultado?.data?.user || resultado?.user || resultado?.usuario
+
+      if (!token || !user) {
+        throw new Error('La respuesta del servidor no tiene el formato de token esperado.')
+      }
+
       // 1. Guardar el token de seguridad
-      localStorage.setItem('fixit_token', resultado.data.token)
+      localStorage.setItem('fixit_token', token)
       
-      // 2. Guardar los datos del usuario (muy útil para mostrar su nombre en el Navbar)
-      localStorage.setItem('fixit_user', JSON.stringify(resultado.data.user))
+      // 2. Guardar los datos del usuario
+      localStorage.setItem('fixit_user', JSON.stringify(user))
 
       setMensajeExito('¡Inicio de sesión exitoso! Redirigiendo...')
 
       // 3. Redirección basada en el ROL del usuario
       setTimeout(() => {
-        const rolUsuario = String(resultado.data.user.rol).toUpperCase()
+        const rolUsuario = String(user.rol || '').toUpperCase()
 
         if (rolUsuario === 'TECNICO') {
-          navigate('/dashboard-tecnico')
+          navigate('/dashboard-tecnico', { replace: true })
         } else if (rolUsuario === 'ADMIN') {
-          navigate('/dashboard-admin') // Preparado para tu siguiente fase
+          navigate('/dashboard-admin', { replace: true })
         } else {
-          navigate('/dashboard-cliente') // Por defecto es cliente
+          navigate('/dashboard-cliente', { replace: true })
         }
-      }, 1500) // Pequeña pausa de 1.5s para que el usuario lea el mensaje de éxito
+      }, 1500)
 
     } catch (err) {
       console.error('Error al iniciar sesión:', err)
@@ -72,8 +83,9 @@ function Login() {
           {mensajeExito && <div className="success-message" style={{ color: 'green', backgroundColor: '#d1fae5', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', textAlign: 'center' }}>{mensajeExito}</div>}
 
           <div className="form-group">
-            <label>Correo Electrónico</label>
+            <label htmlFor="correo-input">Correo Electrónico</label>
             <input
+              id="correo-input"
               type="email"
               placeholder="ejemplo@correo.com"
               value={correo}
@@ -83,8 +95,9 @@ function Login() {
           </div>
 
           <div className="form-group">
-            <label>Contraseña</label>
+            <label htmlFor="password-input">Contraseña</label>
             <input
+              id="password-input"
               type="password"
               placeholder="••••••••"
               value={contrasena}

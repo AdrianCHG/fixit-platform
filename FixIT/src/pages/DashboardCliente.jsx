@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom' // 👈 Importamos useNavigate
+import { Link, useNavigate } from 'react-router-dom'
 import {
   obtenerUsuarioActual,
   obtenerMisIncidencias,
@@ -7,7 +7,7 @@ import {
 import './DashboardCliente.css'
 
 function DashboardCliente() {
-  const navigate = useNavigate() // 👈 Instanciamos el hook de navegación
+  const navigate = useNavigate()
 
   const [usuario, setUsuario] = useState(null)
   const [pestanaActiva, setPestanaActiva] = useState('incidencias')
@@ -28,7 +28,7 @@ function DashboardCliente() {
       try {
         const userLocal = JSON.parse(userStr)
         if (userLocal.rol === 'TECNICO') {
-          navigate('/dashboard-tecnico', { replace: true }) // Redirige y borra el historial de esta vista
+          navigate('/dashboard-tecnico', { replace: true })
           return
         }
       } catch (e) {
@@ -48,7 +48,7 @@ function DashboardCliente() {
             resultadoUsuario?.usuario ??
             resultadoUsuario
 
-          // 🚨 2. VALIDACIÓN SEGURA: Confirmamos con el backend para evitar trampas
+          // 🚨 2. VALIDACIÓN SEGURA: Confirmamos con el backend
           if (datosUsuario?.rol === 'TECNICO') {
             navigate('/dashboard-tecnico', { replace: true })
             return
@@ -91,8 +91,10 @@ function DashboardCliente() {
           throw new Error('Debes iniciar sesión para consultar tus reservas.')
         }
 
+        const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+        
         const respuesta = await fetch(
-          'http://localhost:3000/api/citas/mis-reservas',
+          `${rawApiUrl}/citas/mis-reservas`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -142,13 +144,10 @@ function DashboardCliente() {
 
   const formatearFecha = (fecha) => {
     if (!fecha) return 'Fecha no disponible'
-
     const fechaValida = new Date(fecha)
-
     if (Number.isNaN(fechaValida.getTime())) {
       return 'Fecha no disponible'
     }
-
     return fechaValida.toLocaleDateString('es-PE', {
       day: '2-digit',
       month: 'short',
@@ -156,36 +155,21 @@ function DashboardCliente() {
     })
   }
 
-  // Para fechas de citas que llegan desde MySQL:
-  // "2026-11-13 11:00:00"
-  // Evitamos convertirlas a Date para no alterar la zona horaria.
   const formatearFechaReserva = (fecha) => {
-    if (!fecha || typeof fecha !== 'string') {
-      return 'Fecha no disponible'
-    }
-
+    if (!fecha || typeof fecha !== 'string') return 'Fecha no disponible'
     const partes = fecha.slice(0, 10).split('-')
-
-    if (partes.length !== 3) {
-      return 'Fecha no disponible'
-    }
-
+    if (partes.length !== 3) return 'Fecha no disponible'
     const [anio, mes, dia] = partes
-
     return `${dia}/${mes}/${anio}`
   }
 
   const formatearHoraReserva = (fecha) => {
-    if (!fecha || typeof fecha !== 'string') {
-      return '--:--'
-    }
-
+    if (!fecha || typeof fecha !== 'string') return '--:--'
     return fecha.slice(11, 16)
   }
 
   const formatearEstado = (estado) => {
     if (!estado) return 'Sin estado'
-
     return estado
       .toLowerCase()
       .replace(/_/g, ' ')
@@ -194,9 +178,7 @@ function DashboardCliente() {
 
   const obtenerClaseEstado = (estado) => {
     const valor = (estado || '').toUpperCase()
-
     if (valor.includes('REPORT')) return 'reportada'
-
     if (
       valor.includes('EN_PROCESO') ||
       valor.includes('ASIGNAD') ||
@@ -205,7 +187,6 @@ function DashboardCliente() {
     ) {
       return 'proceso'
     }
-
     if (
       valor.includes('RESUELT') ||
       valor.includes('COMPLET') ||
@@ -213,24 +194,19 @@ function DashboardCliente() {
     ) {
       return 'resuelta'
     }
-
     if (valor.includes('CANCEL')) return 'cancelada'
-
     return 'pendiente'
   }
 
   return (
     <div className="dashboard-cliente">
-
       {/* BIENVENIDA */}
       <section className="dashboard-bienvenida">
         <div>
           <span className="dashboard-etiqueta">
             PANEL DEL CLIENTE
           </span>
-
           <h1>¡Bienvenido, {nombreUsuario}!</h1>
-
           <p>
             Administra tus solicitudes y encuentra el soporte técnico
             que necesitas.
@@ -252,13 +228,8 @@ function DashboardCliente() {
           className="dashboard-acceso-card"
         >
           <span className="dashboard-icono">＋</span>
-
           <h2>Reportar incidencia</h2>
-
-          <p>
-            Describe el problema de tu equipo y comienza el diagnóstico.
-          </p>
-
+          <p>Describe el problema de tu equipo y comienza el diagnóstico.</p>
           <span className="dashboard-enlace">
             Crear solicitud →
           </span>
@@ -269,13 +240,8 @@ function DashboardCliente() {
           className="dashboard-acceso-card"
         >
           <span className="dashboard-icono">⌕</span>
-
           <h2>Buscar técnicos</h2>
-
-          <p>
-            Consulta los especialistas, sus servicios y sus tarifas.
-          </p>
-
+          <p>Consulta los especialistas, sus servicios y sus tarifas.</p>
           <span className="dashboard-enlace">
             Ver técnicos →
           </span>
@@ -286,18 +252,14 @@ function DashboardCliente() {
           className="dashboard-acceso-card"
         >
           <span className="dashboard-icono">♙</span>
-
           <h2>Mi perfil</h2>
-
-          <p>
-            Consulta y administra la información de tu cuenta.
-          </p>
-
+          <p>Consulta y administra la información de tu cuenta.</p>
           <span className="dashboard-enlace">
             Ver mi perfil →
           </span>
         </Link>
       </section>
+
       <div className="dashboard-tabs" role="tablist" aria-label="Historial del cliente">
         <button
           type="button"
@@ -328,10 +290,7 @@ function DashboardCliente() {
         <div className="dashboard-seccion-header">
           <div>
             <h2>Mis incidencias</h2>
-
-            <p>
-              Consulta el estado de tus solicitudes de soporte.
-            </p>
+            <p>Consulta el estado de tus solicitudes de soporte.</p>
           </div>
 
           {!cargando && (
@@ -347,17 +306,12 @@ function DashboardCliente() {
         {cargando ? (
           <div className="dashboard-vacio">
             <h3>Cargando tu información...</h3>
-
-            <p>
-              Estamos consultando tus datos y solicitudes.
-            </p>
+            <p>Estamos consultando tus datos y solicitudes.</p>
           </div>
         ) : errorIncidencias ? (
           <div className="dashboard-vacio">
             <h3>No pudimos cargar tus incidencias</h3>
-
             <p>{errorIncidencias}</p>
-
             <button
               type="button"
               className="dashboard-boton-secundario"
@@ -369,14 +323,11 @@ function DashboardCliente() {
         ) : incidencias.length === 0 ? (
           <div className="dashboard-vacio">
             <div className="dashboard-vacio-icono">▤</div>
-
             <h3>Aún no tienes incidencias</h3>
-
             <p>
               Cuando reportes un problema, podrás consultar aquí
               tus solicitudes y sus estados.
             </p>
-
             <Link
               to="/registrar-incidencia"
               className="dashboard-boton-secundario"
@@ -396,13 +347,10 @@ function DashboardCliente() {
                     {incidencia.tipo_equipo ||
                       'Equipo no especificado'}
                   </h3>
-
                   <p>
                     {incidencia.categoria || 'Sin categoría'}
                   </p>
-
                   <p>{incidencia.descripcion}</p>
-
                   <span className="dashboard-incidencia-fecha">
                     Registrada el{' '}
                     {formatearFecha(incidencia.creado_en)}
@@ -429,16 +377,14 @@ function DashboardCliente() {
         )}
       </section>
       )}
-      {/* MIS RESERVAS - NUEVA SECCIÓN */}
+
+      {/* MIS RESERVAS */}
       {pestanaActiva === 'reservas' && (
       <section className="dashboard-incidencias">
         <div className="dashboard-seccion-header">
           <div>
             <h2>Mis reservas</h2>
-
-            <p>
-              Consulta tus citas programadas con los técnicos.
-            </p>
+            <p>Consulta tus citas programadas con los técnicos.</p>
           </div>
 
           {!cargandoReservas && !errorReservas && (
@@ -454,17 +400,12 @@ function DashboardCliente() {
         {cargandoReservas ? (
           <div className="dashboard-vacio">
             <h3>Cargando tus reservas...</h3>
-
-            <p>
-              Estamos consultando tus citas programadas.
-            </p>
+            <p>Estamos consultando tus citas programadas.</p>
           </div>
         ) : errorReservas ? (
           <div className="dashboard-vacio">
             <h3>No pudimos cargar tus reservas</h3>
-
             <p>{errorReservas}</p>
-
             <button
               type="button"
               className="dashboard-boton-secundario"
@@ -476,13 +417,8 @@ function DashboardCliente() {
         ) : reservas.length === 0 ? (
           <div className="dashboard-vacio">
             <div className="dashboard-vacio-icono">▤</div>
-
             <h3>Aún no tienes reservas</h3>
-
-            <p>
-              Busca un técnico y programa tu primera atención.
-            </p>
-
+            <p>Busca un técnico y programa tu primera atención.</p>
             <Link
               to="/technicians"
               className="dashboard-boton-secundario"
@@ -502,26 +438,22 @@ function DashboardCliente() {
                     {reserva.tecnico_nombre ||
                       'Técnico no disponible'}
                   </h3>
-
                   <p>
                     <strong>Incidencia:</strong>{' '}
                     {reserva.incidencia_descripcion ||
                       'Sin descripción'}
                   </p>
-
                   <p>
                     <strong>Modalidad:</strong>{' '}
                     {reserva.modalidad ||
                       'No especificada'}
                   </p>
-
                   <p>
                     <strong>Fecha:</strong>{' '}
                     {formatearFechaReserva(
                       reserva.inicia_en
                     )}
                   </p>
-
                   <p>
                     <strong>Horario:</strong>{' '}
                     {formatearHoraReserva(
@@ -532,7 +464,6 @@ function DashboardCliente() {
                       reserva.termina_en
                     )}
                   </p>
-
                   <p>
                     <strong>Precio estimado:</strong>{' '}
                     S/ {reserva.precio_est_min}
@@ -563,7 +494,6 @@ function DashboardCliente() {
         )}
       </section>
       )}
-
     </div>
   )
 }

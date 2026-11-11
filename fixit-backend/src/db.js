@@ -17,10 +17,11 @@ export const pool = mysql.createPool({
 });
 
 export async function testConnection() {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.ping();
   } finally {
-    connection.release();
+    if (connection) connection.release();
   }
 }

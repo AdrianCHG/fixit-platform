@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { obtenerUsuarioActual } from '../services/api'
 import './Navbar.css'
@@ -10,6 +10,9 @@ function Navbar() {
     const [menuAbierto, setMenuAbierto] = useState(false)
     const [usuario, setUsuario] = useState(null)
     const [cargandoUsuario, setCargandoUsuario] = useState(true)
+    
+    // Referencia para detectar clics fuera del menú desplegable
+    const menuRef = useRef(null)
 
     useEffect(() => {
         async function cargarUsuario() {
@@ -23,13 +26,9 @@ function Navbar() {
 
             try {
                 const resultado = await obtenerUsuarioActual()
-
-                console.log('Usuario del Navbar:', resultado)
-
-                setUsuario(resultado.data)
+                setUsuario(resultado) // Ya viene limpio con la nueva api.js
             } catch (error) {
                 console.error('Error al cargar usuario en Navbar:', error)
-
                 localStorage.removeItem('fixit_token')
                 setUsuario(null)
             } finally {
@@ -40,10 +39,19 @@ function Navbar() {
         cargarUsuario()
     }, [location.pathname])
 
+    // Cerrar el menú desplegable al hacer clic fuera de él
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setMenuAbierto(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
     const isActive = (path) => {
-        return location.pathname === path
-            ? 'nav-link active'
-            : 'nav-link'
+        return location.pathname === path ? 'nav-link active' : 'nav-link'
     }
 
     const handleLogout = () => {
@@ -57,72 +65,44 @@ function Navbar() {
         if (!usuario?.nombre_completo) {
             return '?'
         }
-
-        return usuario.nombre_completo
-            .trim()
-            .charAt(0)
-            .toUpperCase()
+        return usuario.nombre_completo.trim().charAt(0).toUpperCase()
     }
 
     return (
         <nav className="navbar">
-
             <Link to="/" className="navbar-logo">
                 <div className="logo-icon">🔧</div>
                 <span className="logo-text">FixIT</span>
             </Link>
 
             <div className="navbar-links">
-                <Link
-                    to="/"
-                    className={isActive('/')}
-                >
+                <Link to="/" className={isActive('/')}>
                     Inicio
                 </Link>
-
-                <Link
-                    to="/registrar-incidencia"
-                    className={isActive('/registrar-incidencia')}
-                >
+                <Link to="/registrar-incidencia" className={isActive('/registrar-incidencia')}>
                     Registrar Incidencia
                 </Link>
-
-                <Link
-                    to="/technicians"
-                    className={isActive('/technicians')}
-                >
+                <Link to="/technicians" className={isActive('/technicians')}>
                     Técnicos
                 </Link>
-
-                <Link
-                    to="/help"
-                    className={isActive('/help')}
-                >
+                <Link to="/help" className={isActive('/help')}>
                     Ayuda
                 </Link>
             </div>
 
             <div className="navbar-right">
-
                 <span className="support-text">
                     Soporte: 24/7
                 </span>
 
                 {!cargandoUsuario && !usuario ? (
-
                     <div className="auth-links">
-                        <Link
-                            to="/login"
-                            className="nav-auth-link highlight"
-                        >
+                        <Link to="/login" className="nav-auth-link highlight">
                             Ingresar
                         </Link>
                     </div>
-
                 ) : !cargandoUsuario && usuario ? (
-
-                    <div className="user-menu-container">
-
+                    <div className="user-menu-container" ref={menuRef}>
                         <button
                             className="user-avatar-btn"
                             onClick={() => setMenuAbierto(!menuAbierto)}
@@ -131,17 +111,10 @@ function Navbar() {
                         </button>
 
                         {menuAbierto && (
-
                             <div className="dropdown-menu">
-
                                 <div className="dropdown-header">
-                                    <strong>
-                                        {usuario.nombre_completo}
-                                    </strong>
-
-                                    <span>
-                                        {usuario.correo}
-                                    </span>
+                                    <strong>{usuario.nombre_completo}</strong>
+                                    <span>{usuario.correo}</span>
                                 </div>
 
                                 <hr />
@@ -170,17 +143,11 @@ function Navbar() {
                                 >
                                     Cerrar Sesión
                                 </button>
-
                             </div>
-
                         )}
-
                     </div>
-
                 ) : null}
-
             </div>
-
         </nav>
     )
 }

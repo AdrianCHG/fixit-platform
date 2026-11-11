@@ -10,10 +10,22 @@ function TechnicianProfile() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(null)
 
+  // URL base dinámica para producción y desarrollo
+  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+  const baseUrl = rawApiUrl.replace(/\/api$/, '')
+
   useEffect(() => {
+    let activo = true
+    const controlador = new AbortController()
+
     const obtenerPerfilTecnico = async () => {
       try {
-        const respuesta = await fetch(`http://localhost:3000/api/tecnicos/${id}`)
+        setCargando(true)
+        setError(null)
+
+        const respuesta = await fetch(`${rawApiUrl}/tecnicos/${id}`, {
+          signal: controlador.signal
+        })
         
         if (!respuesta.ok) {
           throw new Error('No se pudo encontrar el perfil del técnico')
@@ -21,22 +33,35 @@ function TechnicianProfile() {
 
         const json = await respuesta.json() 
         
+        // --- DEBUGEAR EN CONSOLA EL JSON EXACTO DEL BACKEND ---
+        console.log("JSON RECIBIDO DEL TÉCNICO:", json)
+
         if (json.success && json.data) {
-           setTecnico(json.data) 
+           if (activo) setTecnico(json.data) 
+        } else if (json) {
+           // Por si el backend devuelve el objeto directo sin .data
+           if (activo) setTecnico(json)
         } else {
            throw new Error(json.message || 'Error al obtener datos')
         }
 
       } catch (err) {
-        console.error("Error al cargar el perfil:", err)
-        setError(err.message)
+        if (err.name !== 'AbortError' && activo) {
+          console.error("Error al cargar el perfil:", err)
+          setError(err.message)
+        }
       } finally {
-        setCargando(false)
+        if (activo) setCargando(false)
       }
     }
 
     obtenerPerfilTecnico()
-  }, [id])
+
+    return () => {
+      activo = false
+      controlador.abort()
+    }
+  }, [id, rawApiUrl])
 
   const handleVolver = () => {
     navigate(-1)
@@ -47,14 +72,46 @@ function TechnicianProfile() {
   }
 
   if (error || !tecnico) {
-    return <div className="error-container"><h2>Error: {error}</h2><button onClick={handleVolver}>Volver</button></div>
+    return (
+      <div className="error-container">
+        <h2>Error: {error || 'No se encontró información'}</h2>
+        <button type="button" onClick={handleVolver}>Volver</button>
+      </div>
+    )
   }
+
+  // --- BUSCAR EN CUALQUIER PROPIEDAD POSIBLE LAS ZONAS DE ATENCIÓN ---
+  const zonasRaw = 
+    tecnico.zonas_atencion || 
+    tecnico.distritos || 
+    tecnico.zonas || 
+    tecnico.cobertura || 
+    tecnico.zonasAtencion || []
+
+  const obtenerZonasAtencion = () => {
+    if (!Array.isArray(zonasRaw) || zonasRaw.length === 0) return null
+
+    return zonasRaw
+      .map((zona) => {
+        if (typeof zona === 'string') return zona
+        return zona.distrito || zona.nombre || zona.zona || zona.nombre_distrito || ''
+      })
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  const textoZonas = obtenerZonasAtencion()
+
+  // --- FILTRO DE CERTIFICACIONES APROBADAS ---
+  const certificacionesAprobadas = (tecnico.certificaciones || tecnico.estudios || []).filter(
+    (cert) => cert.verificada === 1 || cert.estado === 'APROBADO' || cert.aprobado === true || cert.verificado === 1
+  )
 
   return (
     <div className="profile-container">
       <div className="profile-card">
         
-        <button className="btn-back" onClick={handleVolver}>← Volver a resultados</button>
+        <button type="button" className="btn-back" onClick={handleVolver}>← Volver a resultados</button>
 
         {/* --- CABECERA (FOTO Y TÍTULO) --- */}
         <div className="profile-header">
@@ -63,7 +120,7 @@ function TechnicianProfile() {
             <img
               src={
                 tecnico.avatar_url.startsWith('/uploads')
-                  ? `http://localhost:3000${tecnico.avatar_url}`
+                  ? `${baseUrl}${tecnico.avatar_url}`
                   : tecnico.avatar_url
               }
               alt={`Foto de ${tecnico.nombre}`}
@@ -75,7 +132,7 @@ function TechnicianProfile() {
         </div>
           <div className="profile-title-area">
             <div className="profile-title-row">
-              <h2>{tecnico.nombre}</h2>
+              <h2>{tecnico.nombre || tecnico.nombre_completo}</h2>
               {tecnico.acepta_reservas === 1 && (
                 <span style={{ backgroundColor: '#DBEAFE', color: '#1E40AF', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
                   Disponible hoy
@@ -86,12 +143,7 @@ function TechnicianProfile() {
               {tecnico.especialidades?.join(' - ') || 'Especialista Técnico'}
             </div>
             <div className="profile-location">
-              📍 Zonas de atención:{' '}
-              {tecnico.zonas_atencion?.length > 0
-                ? tecnico.zonas_atencion
-                    .map((zona) => zona.distrito)
-                    .join(' · ')
-                : 'No registradas'}
+              📍 Zonas de atención: {textoZonas ? textoZonas : <span style={{ color: '#ef4444' }}>No se detectaron zonas en el objeto JSON (ver consola F12)</span>}
             </div>
           </div>
         </div>
@@ -99,15 +151,15 @@ function TechnicianProfile() {
         {/* --- GRILLA DE ESTADÍSTICAS --- */}
         <div className="profile-stats-grid">
           <div className="stat-box">
-            <span className="stat-value">★ {tecnico.calificacion}</span>
-            <span className="stat-label">RESEÑAS ({tecnico.resenas})</span>
+            <span className="stat-value">★ {tecnico.calificacion || '0'}</span>
+            <span className="stat-label">RESEÑAS ({tecnico.resenas || 0})</span>
           </div>
           <div className="stat-box">
-            <span className="stat-value">{tecnico.anios_experiencia} años</span>
+            <span className="stat-value">{tecnico.anios_experiencia || 0} años</span>
             <span className="stat-label">EXPERIENCIA</span>
           </div>
           <div className="stat-box">
-            <span className="stat-value">{tecnico.certificaciones?.length || 0}</span>
+            <span className="stat-value">{certificacionesAprobadas.length}</span>
             <span className="stat-label">CERTIFICACIONES</span>
           </div>
         </div>
@@ -118,21 +170,23 @@ function TechnicianProfile() {
         <div className="profile-content">
           <div className="content-section">
             <h3>Sobre mí</h3>
-            <p>{tecnico.biografia}</p>
+            <p>{tecnico.biografia || 'Sin biografía registrada.'}</p>
           </div>
 
           <div className="content-section">
             <h3>Certificaciones y Estudios</h3>
-            {tecnico.certificaciones && tecnico.certificaciones.length > 0 ? (
+            {certificacionesAprobadas.length > 0 ? (
               <ul className="certifications-list">
-                {tecnico.certificaciones.map((cert, index) => (
-                  <li key={index}>
-                    🎓 {cert.nombre} {cert.verificada === 1 && '✅'}
+                {certificacionesAprobadas.map((cert, index) => (
+                  <li key={index} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+                    🎓 {cert.nombre || cert.titulo} ✅
                   </li>
                 ))}
               </ul>
             ) : (
-              <p>Sin certificaciones registradas.</p>
+              <p style={{ color: '#6b7280', fontSize: '0.95rem', fontStyle: 'italic' }}>
+                El especialista aún no cuenta con certificaciones aprobadas por administración.
+              </p>
             )}
           </div>
         </div>
@@ -148,6 +202,7 @@ function TechnicianProfile() {
             </span>
           </div>
           <button
+            type="button"
             className="btn-primary"
             onClick={() => navigate(`/reservar/${id}`)}
           >

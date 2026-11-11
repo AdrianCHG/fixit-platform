@@ -5,7 +5,6 @@ function Home() {
     const navigate = useNavigate();
 
     // DATOS ESTÁTICOS (MOCKS)
-    // Arreglo de objetos que representa los dispositivos soportados.
     const dispositivos = [
         { id: 'laptop', nombre: 'Laptop', icono: '💻' },
         { id: 'pc', nombre: 'PC Escritorio', icono: '🖥️' },
@@ -14,14 +13,12 @@ function Home() {
         { id: 'otro', nombre: 'Otro', icono: '❔' }
     ];
 
-    // Arreglo con los pasos del flujo de trabajo de FixIT.
     const pasos = [
         { num: 1, titulo: 'Describe tu problema', desc: 'Completa el formulario de incidencia.' },
         { num: 2, titulo: 'Triaje automático', desc: 'Analizamos la causa con preguntas clave.' },
         { num: 3, titulo: 'Conecta con técnico', desc: 'Elige la mejor propuesta en minutos.' }
     ];
 
-    // MANEJADORES DE EVENTOS
     const handleDeviceSelect = (dispositivo) => {
         console.log(`Dispositivo seleccionado: ${dispositivo.nombre}`);
         navigate('/registrar-incidencia');
@@ -48,6 +45,7 @@ function Home() {
                     {dispositivos.map((disp) => (
                         <button 
                             key={disp.id} 
+                            type="button"
                             className="device-card"
                             onClick={() => handleDeviceSelect(disp)}
                         >

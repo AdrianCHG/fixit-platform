@@ -17,22 +17,24 @@ import ReservarServicio from './pages/ReservarServicio'
 import Help from './pages/Help'
 import RegistroTecnico from './pages/RegistroTecnico'
 import DashboardTecnico from './pages/DashboardTecnico'
+// import DashboardAdmin from './pages/DashboardAdmin' // Descomentar cuando crees tu panel de admin
 
 function MainLayout() {
   const location = useLocation()
   
-  const esDashboardTecnico = location.pathname.includes('/dashboard-tecnico')
+  // Ocultar Navbar y Footer en dashboards especializados si se prefiere pantalla completa
+  const esDashboardEspecializado = location.pathname.includes('/dashboard-tecnico') || location.pathname.includes('/dashboard-admin')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       
-      {!esDashboardTecnico && <Navbar />}
+      {!esDashboardEspecializado && <Navbar />}
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Routes>
-          <Route path="/" element={<Home />}/>
+          <Route path="/" element={<Home />} />
           <Route path="/technicians" element={<Technicians />} />
-          <Route path="/login" element={<Login />}/>
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/registrar-incidencia" element={<RegistrarIncidencia />} />
           <Route path="/triaje" element={<Triaje />} />
@@ -46,10 +48,11 @@ function MainLayout() {
           <Route path="/help" element={<Help />} />
           <Route path="/registro-tecnico" element={<RegistroTecnico />} />
           <Route path="/dashboard-tecnico" element={<DashboardTecnico />} />
+          {/* <Route path="/dashboard-admin" element={<DashboardAdmin />} /> */}
         </Routes>
       </main>
 
-      {!esDashboardTecnico && <Footer />}
+      {!esDashboardEspecializado && <Footer />}
 
     </div>
   )

@@ -10,6 +10,10 @@ function DetalleIncidencia() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
 
+  // URL base dinámica para producción y desarrollo
+  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+  const baseUrl = rawApiUrl.replace(/\/api$/, '')
+
   useEffect(() => {
     let activo = true
 
@@ -196,10 +200,11 @@ function DetalleIncidencia() {
             {incidencia.fotos && incidencia.fotos.length > 0 ? (
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                 {incidencia.fotos.map((foto, index) => {
+                  const urlFoto = foto.startsWith('http') ? foto : `${baseUrl}/${foto.replace(/^\/+/, '')}`
                   return (
                     <a
                       key={index}
-                      href={`http://localhost:3000/${foto}`}
+                      href={urlFoto}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{

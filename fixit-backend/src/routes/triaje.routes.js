@@ -6,7 +6,7 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 // Obtener preguntas activas con sus opciones
-router.get('/preguntas', authenticateToken, async (req, res) => {
+router.get('/preguntas', authenticateToken, async (req, res, next) => {
   try {
     const [preguntas] = await pool.query(`
       SELECT id, texto, nro_orden
@@ -36,21 +36,17 @@ router.get('/preguntas', authenticateToken, async (req, res) => {
         }))
     }));
 
-    res.json({
+    return res.json({
       success: true,
       data: preguntasConOpciones
     });
   } catch (error) {
-    console.error('Error al obtener preguntas:', error);
-    res.status(500).json({
-      success: false,
-      message: 'No se pudieron cargar las preguntas del triaje'
-    });
+    next(error);
   }
 });
 
 // Guardar respuestas y generar resultado preliminar dinámico
-router.post('/respuestas', authenticateToken, async (req, res) => {
+router.post('/respuestas', authenticateToken, async (req, res, next) => {
   const { incidencia_id, respuestas } = req.body;
 
   if (
@@ -60,13 +56,14 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
   ) {
     return res.status(400).json({
       success: false,
-      message: 'Debes indicar la incidencia y las respuestas del triaje'
+      message: 'Debes indicar la incidencia y las respuestas del triaje.'
     });
   }
 
-  const conexion = await pool.getConnection();
+  let conexion;
 
   try {
+    conexion = await pool.getConnection();
     await conexion.beginTransaction();
 
     // 1. Verificar que la incidencia pertenece al usuario y obtener el tipo de equipo
@@ -83,11 +80,11 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
       await conexion.rollback();
       return res.status(404).json({
         success: false,
-        message: 'No se encontró la incidencia para este usuario'
+        message: 'No se encontró la incidencia para este usuario.'
       });
     }
 
-    // Comprobar preguntas activas y opciones válidas (incluyendo el peso)
+    // Comprobar preguntas activas y opciones válidas
     const [preguntas] = await conexion.query(`
       SELECT id
       FROM preguntas_triaje
@@ -116,7 +113,7 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
         await conexion.rollback();
         return res.status(400).json({
           success: false,
-          message: 'Hay respuestas con un formato inválido'
+          message: 'Hay respuestas con un formato inválido.'
         });
       }
 
@@ -126,7 +123,7 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
         await conexion.rollback();
         return res.status(400).json({
           success: false,
-          message: 'Una de las opciones no corresponde a su pregunta'
+          message: 'Una de las opciones no corresponde a su pregunta.'
         });
       }
 
@@ -134,7 +131,7 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
         await conexion.rollback();
         return res.status(400).json({
           success: false,
-          message: 'No puedes responder dos veces la misma pregunta'
+          message: 'No puedes responder dos veces la misma pregunta.'
         });
       }
 
@@ -148,11 +145,11 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
       await conexion.rollback();
       return res.status(400).json({
         success: false,
-        message: 'Debes responder todas las preguntas activas'
+        message: 'Debes responder todas las preguntas activas.'
       });
     }
 
-    // Contar categorías elegidas y calcular la categoría preliminar.
+    // Contar categorías elegidas y calcular la categoría preliminar
     const conteoCategorias = new Map();
 
     for (const opcion of mapaRespuestas.values()) {
@@ -171,7 +168,7 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
       await conexion.rollback();
       return res.status(400).json({
         success: false,
-        message: 'No se pudo determinar una categoría preliminar'
+        message: 'No se pudo determinar una categoría preliminar.'
       });
     }
 
@@ -186,7 +183,7 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
       await conexion.rollback();
       return res.status(400).json({
         success: false,
-        message: 'La categoría del diagnóstico no existe'
+        message: 'La categoría del diagnóstico no existe.'
       });
     }
 
@@ -198,7 +195,6 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
 
     const tipoEquipoCodigo = incidencias[0].tipo_equipo_codigo || 'OTRO';
     
-    // Modificadores según la complejidad del equipo
     const modificadoresEquipo = {
       LAPTOP: 25,
       PC_ESCRITORIO: 10,
@@ -207,19 +203,19 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
       OTRO: 15
     };
 
-    const tarifaBase = 40; // Costo fijo por revisión
-    const costoPorPeso = 12; // Multiplicador por severidad del problema
+    const tarifaBase = 40; 
+    const costoPorPeso = 12; 
     const modEquipo = modificadoresEquipo[tipoEquipoCodigo] || 15;
 
     const calculoBase = tarifaBase + modEquipo + (sumaPesos * costoPorPeso);
-    const precioMin = Math.round(calculoBase / 5) * 5; // Redondeado estético
-    const precioMax = precioMin + 50; // Margen de estimación
+    const precioMin = Math.round(calculoBase / 5) * 5; 
+    const precioMax = precioMin + 50; 
 
     const recomendacion =
       `El triaje preliminar apunta a la categoría ${categorias[0].nombre}. ` +
       'Un técnico deberá evaluar el equipo para confirmar la causa y el costo de reparación.';
 
-    // Guardar las respuestas seleccionadas.
+    // Guardar las respuestas seleccionadas
     await conexion.query(
       'DELETE FROM respuestas_triaje WHERE incidencia_id = ?',
       [incidencia_id]
@@ -277,19 +273,20 @@ router.post('/respuestas', authenticateToken, async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Triaje guardado correctamente',
+      message: 'Triaje guardado correctamente.',
       data: resultados[0]
     });
   } catch (error) {
-    await conexion.rollback();
-    console.error('Error al guardar el triaje:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'No se pudo guardar el triaje'
-    });
+    if (conexion) {
+      try {
+        await conexion.rollback();
+      } catch (rollbackError) {
+        console.error('Error al revertir transacción de triaje:', rollbackError);
+      }
+    }
+    next(error);
   } finally {
-    conexion.release();
+    if (conexion) conexion.release();
   }
 });
 

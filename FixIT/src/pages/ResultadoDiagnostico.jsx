@@ -73,7 +73,7 @@ function ResultadoDiagnostico() {
             </div>
 
             <div className="alerta-informativa">
-              <span className="alerta-icono">ℹ️</span>
+              <span className="alerta-icono" aria-hidden="true">ℹ️</span>
               <p>
                 Este es un diagnóstico referencial basado en el
                 triaje automático. El soporte técnico realizará
@@ -97,6 +97,7 @@ function ResultadoDiagnostico() {
         {/* BOTONES DE ACCIÓN */}
         <div className="diagnostico-acciones">
           <button
+            type="button"
             className="btn-secondary"
             onClick={handleVolverInicio}
           >
@@ -105,6 +106,7 @@ function ResultadoDiagnostico() {
 
           {diagnostico ? (
             <button
+              type="button"
               className="btn-primary"
               onClick={handleBuscarTecnicos}
             >
@@ -112,6 +114,7 @@ function ResultadoDiagnostico() {
             </button>
           ) : (
             <button
+              type="button"
               className="btn-primary"
               onClick={() => navigate('/triaje')}
             >

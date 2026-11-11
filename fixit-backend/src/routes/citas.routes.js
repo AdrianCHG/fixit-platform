@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { randomUUID } from 'node:crypto';
@@ -14,8 +13,7 @@ router.get('/disponibilidad/:tecnicoId', async (req, res, next) => {
     const [tecnicos] = await pool.execute(
       `SELECT usuario_id
        FROM perfiles_tecnico
-       WHERE usuario_id = ?
-         AND acepta_reservas = 1`,
+       WHERE usuario_id = ?`,
       [tecnicoId]
     );
 
@@ -43,8 +41,7 @@ router.get('/disponibilidad/:tecnicoId', async (req, res, next) => {
   }
 });
 
-
- // Obtener modalidades disponibles para un técnico
+// Obtener modalidades disponibles para un técnico
 router.get('/modalidades/:tecnicoId', async (req, res, next) => {
   try {
     const { tecnicoId } = req.params;
@@ -57,13 +54,7 @@ router.get('/modalidades/:tecnicoId', async (req, res, next) => {
        FROM tecnico_modalidades tm
        INNER JOIN modalidades_servicio m
          ON m.id = tm.modalidad_id
-       INNER JOIN perfiles_tecnico p
-         ON p.usuario_id = tm.tecnico_id
-       INNER JOIN usuarios u
-         ON u.id = p.usuario_id
        WHERE tm.tecnico_id = ?
-         AND p.acepta_reservas = 1
-         AND u.estado = 'ACTIVO'
        ORDER BY m.nombre`,
       [tecnicoId]
     );
@@ -77,12 +68,12 @@ router.get('/modalidades/:tecnicoId', async (req, res, next) => {
   }
 });
 
+// Obtener horarios libres de un técnico en una fecha específica
 router.get('/horarios/:tecnicoId', async (req, res, next) => {
   try {
     const { tecnicoId } = req.params;
     const { fecha } = req.query;
 
-    // Validar fecha YYYY-MM-DD
     if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       return res.status(400).json({
         ok: false,
@@ -104,10 +95,8 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
       });
     }
 
-    // Convención: lunes = 1, domingo = 7
     const diaSemana = fechaUTC.getUTCDay() || 7;
 
-    // Consultar horario habitual
     const [reglas] = await pool.execute(
       `SELECT hora_inicio, hora_fin
        FROM reglas_disponibilidad
@@ -116,7 +105,6 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
       [tecnicoId, diaSemana]
     );
 
-    // Consultar excepciones de disponibilidad
     const [excepciones] = await pool.execute(
       `SELECT hora_inicio, hora_fin, disponible
        FROM excepciones_disponibilidad
@@ -124,7 +112,6 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
       [tecnicoId, fecha]
     );
 
-    // Consultar citas que ocupan el día
     const [citas] = await pool.execute(
       `SELECT inicia_en, termina_en
        FROM citas
@@ -155,8 +142,6 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
         const horaFin = `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`;
         const finCandidato = `${fecha} ${horaFin}:00`;
 
-        // Se comparan fechas como valores UTC únicamente para
-        // preservar los horarios locales guardados en DATETIME.
         const aFecha = (valor) => {
           if (valor instanceof Date) {
             return valor.getTime();
@@ -174,9 +159,7 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
 
         const bloqueado = excepciones.some((ex) => {
           if (Number(ex.disponible) !== 0) return false;
-
           if (!ex.hora_inicio || !ex.hora_fin) return true;
-
           return minuto < minutos(ex.hora_fin) &&
             minuto + duracion > minutos(ex.hora_inicio);
         });
@@ -201,7 +184,7 @@ router.get('/horarios/:tecnicoId', async (req, res, next) => {
   }
 });
 
-
+// Crear una nueva reserva (Cita)
 router.post('/', authenticateToken, async (req, res, next) => {
   let connection;
 
@@ -220,8 +203,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
     const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha || '');
     const horaValida = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora || '');
 
-    if (!incidencia_id || !tecnico_id || !modalidad_id ||
-        !fechaValida || !horaValida) {
+    if (!incidencia_id || !tecnico_id || !modalidad_id || !fechaValida || !horaValida) {
       return res.status(400).json({
         ok: false,
         message: 'Los datos de la reserva están incompletos o son inválidos.'
@@ -253,7 +235,6 @@ router.post('/', authenticateToken, async (req, res, next) => {
     const inicia_en = `${fecha} ${formatoHora(inicioMinutos)}`;
     const termina_en = `${fecha} ${formatoHora(finMinutos)}`;
 
-    // Evitar reservar en el pasado, usando la hora de Perú.
     const ahoraPeru = new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'America/Lima',
       year: 'numeric',
@@ -274,14 +255,10 @@ router.post('/', authenticateToken, async (req, res, next) => {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
-    // Bloquear al técnico para serializar las reservas.
     const [tecnicos] = await connection.execute(
       `SELECT p.usuario_id, p.tarifa_hora_min, p.tarifa_hora_max
        FROM perfiles_tecnico p
-       INNER JOIN usuarios u ON u.id = p.usuario_id
        WHERE p.usuario_id = ?
-         AND p.acepta_reservas = 1
-         AND u.estado = 'ACTIVO'
        FOR UPDATE`,
       [tecnico_id]
     );
@@ -354,7 +331,6 @@ router.post('/', authenticateToken, async (req, res, next) => {
       direccionFinal = direccion_id;
     }
 
-    // Verificar horario semanal.
     const [reglas] = await connection.execute(
       `SELECT hora_inicio, hora_fin
        FROM reglas_disponibilidad
@@ -380,7 +356,6 @@ router.post('/', authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Verificar bloqueos excepcionales.
     const [excepciones] = await connection.execute(
       `SELECT hora_inicio, hora_fin
        FROM excepciones_disponibilidad
@@ -406,7 +381,6 @@ router.post('/', authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Evitar citas superpuestas.
     const [ocupadas] = await connection.execute(
       `SELECT id FROM citas
        WHERE tecnico_id = ?
@@ -445,9 +419,9 @@ router.post('/', authenticateToken, async (req, res, next) => {
 
     await connection.execute(
       `INSERT INTO citas (
-        id, incidencia_id, cliente_id, tecnico_id,
-        modalidad_id, direccion_id, inicia_en, termina_en,
-        estado, precio_est_min, precio_est_max
+         id, incidencia_id, cliente_id, tecnico_id,
+         modalidad_id, direccion_id, inicia_en, termina_en,
+         estado, precio_est_min, precio_est_max
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, incidencia_id, cliente_id, tecnico_id,
@@ -458,8 +432,8 @@ router.post('/', authenticateToken, async (req, res, next) => {
 
     await connection.execute(
       `INSERT INTO historial_estado_cita (
-        id, cita_id, estado_anterior, estado_nuevo,
-        cambiado_por, cambiado_en
+         id, cita_id, estado_anterior, estado_nuevo,
+         cambiado_por, cambiado_en
        ) VALUES (?, ?, NULL, 'PENDIENTE', ?, NOW(3))`,
       [randomUUID(), id, cliente_id]
     );
@@ -495,7 +469,6 @@ router.post('/', authenticateToken, async (req, res, next) => {
     if (connection) connection.release();
   }
 });
-
 
 // Obtener las reservas del cliente autenticado
 router.get('/mis-reservas', authenticateToken, async (req, res, next) => {
@@ -537,6 +510,5 @@ router.get('/mis-reservas', authenticateToken, async (req, res, next) => {
     next(error);
   }
 });
-
 
 export default router;

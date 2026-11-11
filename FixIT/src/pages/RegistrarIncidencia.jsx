@@ -17,9 +17,12 @@ function RegistrarIncidencia() {
   const [cargando, setCargando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
-  const [fotos, setFotos] = useState([]);
+  const [fotos, setFotos] = useState([])
 
   const maxCaracteres = 500
+
+  // URL base dinámica para producción y desarrollo
+  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
   useEffect(() => {
     let activo = true
@@ -70,7 +73,6 @@ function RegistrarIncidencia() {
       return combinados.slice(0, 3) // Mantiene solo los primeros 3
     })
 
-    // Limpia el input para permitir seleccionar el mismo archivo si se desea
     e.target.value = ''
   }
 
@@ -99,9 +101,9 @@ function RegistrarIncidencia() {
         }
       }
 
-      const token = localStorage.getItem('fixit_token') || '' // Ajusta la key si es que cambia
+      const token = localStorage.getItem('fixit_token') || ''
 
-      const respuesta = await fetch('http://localhost:3000/api/incidencias', {
+      const respuesta = await fetch(`${rawApiUrl}/incidencias`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

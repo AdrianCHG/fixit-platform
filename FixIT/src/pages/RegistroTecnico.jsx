@@ -19,6 +19,10 @@ function RegistroTecnico() {
   })
   const [error, setError] = useState('')
   const [mensajeExito, setMensajeExito] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  // URL base dinámica para producción y desarrollo
+  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
   const handleChange = (e) => {
     const { name, value, type, files } = e.target
@@ -67,16 +71,21 @@ function RegistroTecnico() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (enviando) return
+
     setError('')
     setMensajeExito('')
+    setEnviando(true)
 
     const dataToSend = new FormData()
     Object.keys(formData).forEach((key) => {
-      dataToSend.append(key, formData[key])
+      if (formData[key] !== null) {
+        dataToSend.append(key, formData[key])
+      }
     })
 
     try {
-      const respuesta = await fetch('http://localhost:3000/api/auth/registro-tecnico', {
+      const respuesta = await fetch(`${rawApiUrl}/auth/registro-tecnico`, {
         method: 'POST',
         body: dataToSend
       })
@@ -88,17 +97,16 @@ function RegistroTecnico() {
       }
 
       setMensajeExito('¡Registro exitoso! Tu cuenta está pendiente de aprobación por el administrador.')
-      
-      // 🚩 MAGIA AQUÍ: Sube la pantalla automáticamente hacia arriba para que vea el mensaje
       window.scrollTo({ top: 0, behavior: 'smooth' })
 
       setTimeout(() => {
         navigate('/login')
       }, 3000)
     } catch (err) {
-      setError(err.message)
-      // Si hay error también sube la pantalla para que lo vea
+      setError(err.message || 'Error de conexión al registrar técnico.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setEnviando(false)
     }
   }
 
@@ -113,8 +121,9 @@ function RegistroTecnico() {
 
         <form onSubmit={handleSubmit} className="register-form">
           <div className="form-group">
-            <label>Nombre y Apellidos</label>
+            <label htmlFor="nombre_completo">Nombre y Apellidos</label>
             <input
+              id="nombre_completo"
               type="text"
               name="nombre_completo"
               value={formData.nombre_completo}
@@ -125,31 +134,36 @@ function RegistroTecnico() {
           </div>
 
           <div className="form-group">
-            <label>Correo Electrónico Profesional</label>
+            <label htmlFor="correo">Correo Electrónico Profesional</label>
             <input
+              id="correo"
               type="email"
               name="correo"
               value={formData.correo}
               onChange={handleChange}
+              placeholder="ejemplo@correo.com"
               required
             />
           </div>
 
           <div className="form-group">
-            <label>Contraseña</label>
+            <label htmlFor="contrasena">Contraseña</label>
             <input
+              id="contrasena"
               type="password"
               name="contrasena"
               value={formData.contrasena}
               onChange={handleChange}
+              placeholder="••••••••"
               required
             />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
-              <label>Teléfono / Celular</label>
+              <label htmlFor="telefono">Teléfono / Celular</label>
               <input
+                id="telefono"
                 type="text"
                 name="telefono"
                 value={formData.telefono}
@@ -159,8 +173,9 @@ function RegistroTecnico() {
               />
             </div>
             <div className="form-group">
-              <label>Años de Experiencia</label>
+              <label htmlFor="anios_experiencia">Años de Experiencia</label>
               <input
+                id="anios_experiencia"
                 type="number"
                 min="0"
                 name="anios_experiencia"
@@ -173,8 +188,9 @@ function RegistroTecnico() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
             <div className="form-group">
-              <label>Tipo Doc.</label>
+              <label htmlFor="tipo_documento">Tipo Doc.</label>
               <select
+                id="tipo_documento"
                 name="tipo_documento"
                 value={formData.tipo_documento}
                 onChange={handleTipoDocumentoChange}
@@ -187,12 +203,14 @@ function RegistroTecnico() {
               </select>
             </div>
             <div className="form-group">
-              <label>Número de Documento</label>
+              <label htmlFor="nro_documento">Número de Documento</label>
               <input
+                id="nro_documento"
                 type="text"
                 name="nro_documento"
                 value={formData.nro_documento}
                 onChange={handleChange}
+                placeholder={formData.tipo_documento === 'DNI' ? 'Ej. 71234567' : 'Ej. 000123456'}
                 required
               />
             </div>
@@ -200,8 +218,9 @@ function RegistroTecnico() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
-              <label>Tarifa Hora Mínima (S/)</label>
+              <label htmlFor="tarifa_hora_min">Tarifa Hora Mínima (S/)</label>
               <input
+                id="tarifa_hora_min"
                 type="number"
                 step="0.01"
                 min="0"
@@ -212,8 +231,9 @@ function RegistroTecnico() {
               />
             </div>
             <div className="form-group">
-              <label>Tarifa Hora Máxima (S/)</label>
+              <label htmlFor="tarifa_hora_max">Tarifa Hora Máxima (S/)</label>
               <input
+                id="tarifa_hora_max"
                 type="number"
                 step="0.01"
                 min="0"
@@ -226,8 +246,9 @@ function RegistroTecnico() {
           </div>
 
           <div className="form-group">
-            <label>Foto de Perfil (Avatar)</label>
+            <label htmlFor="avatar">Foto de Perfil (Avatar)</label>
             <input
+              id="avatar"
               type="file"
               name="avatar"
               accept="image/png, image/jpeg, image/jpg"
@@ -237,8 +258,9 @@ function RegistroTecnico() {
           </div>
 
           <div className="form-group">
-            <label>Breve Biografía / Especialidades</label>
+            <label htmlFor="biografia">Breve Biografía / Especialidades</label>
             <textarea
+              id="biografia"
               name="biografia"
               rows="3"
               value={formData.biografia}
@@ -249,8 +271,8 @@ function RegistroTecnico() {
             ></textarea>
           </div>
 
-          <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
-            Enviar Postulación como Técnico
+          <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={enviando}>
+            {enviando ? 'Enviando postulación...' : 'Enviar Postulación como Técnico'}
           </button>
         </form>
 

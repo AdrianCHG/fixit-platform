@@ -1,18 +1,20 @@
-import { Link } from 'react-router-dom'
-import './Footer.css'
+import { Link } from 'react-router-dom';
+import './Footer.css';
 
 function Footer() {
+  const currentYear = new Date().getFullYear();
+
   return (
     <footer className="global-footer">
       <div className="footer-content">
-        <p>© 2026 FixIT. Todos los derechos reservados.</p>
+        <p>© {currentYear} FixIT. Todos los derechos reservados.</p>
         <div className="footer-links">
           <Link to="#">Términos de Servicio</Link>
           <Link to="#">Privacidad</Link>
         </div>
       </div>
     </footer>
-  )
+  );
 }
 
-export default Footer
+export default Footer;
